@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# WhatsApp auth state (sensitive!)
+auth_info/
+
+# Environment variables
+.env
+
+# Python venv (legacy, no longer used)
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+
+# Logs
+*.log
+
+# Turso local replica
+*.db
+*.db-journal
+
+# Sesión local (Multi-tenant)
+.bot_session
