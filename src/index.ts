@@ -7,6 +7,7 @@ import { initContactsListener } from "./whatsapp/contacts.js";
 import { initChannelsListener } from "./whatsapp/channels.js";
 import { showMainMenu } from "./cli/menu.js";
 import { stopScheduler } from "./scheduler/cron.js";
+import { startWebServer } from "./web/server.js";
 
 // Silenciar console.info que usa libsignal internamente (evita el spam de "Closing session")
 const originalConsoleInfo = console.info;
@@ -36,49 +37,60 @@ async function main(): Promise<void> {
   console.log("📦 Inicializando base de datos...");
   await initDatabase();
 
-  // Seleccionar método de autenticación
-  const authMode = await select({
-    message: "Método de autenticación:",
+  const interfaceMode = await select({
+    message: "¿Qué interfaz querés usar para controlar el bot?",
     choices: [
-      { name: "📱 QR Code (escaneá desde el celular)", value: "qr" as AuthMode },
-      { name: "🔑 Pairing Code (código numérico)", value: "pairing" as AuthMode },
-    ],
+      { name: "🖥️  Terminal (CLI Interactiva)", value: "cli" },
+      { name: "🌐  Servidor Web (Dashboard UI)", value: "web" },
+    ]
   });
 
-  let phoneNumber: string | undefined;
-  if (authMode === "pairing") {
-    phoneNumber = await input({
-      message: "Número de teléfono (sin +, sin espacios, ej: 5491112345678):",
-      validate: (v) =>
-        /^\d{10,15}$/.test(v.trim()) ? true : "Ingresá solo números (10-15 dígitos)",
+  if (interfaceMode === "web") {
+    await startWebServer(3000);
+    console.log("Presioná Ctrl+C para detener el servidor.");
+    // Mantenemos el proceso vivo
+    await new Promise(() => {});
+  } else {
+    // Seleccionar método de autenticación
+    const authMode = await select({
+      message: "Método de autenticación:",
+      choices: [
+        { name: "📱 QR Code (escaneá desde el celular)", value: "qr" as AuthMode },
+        { name: "🔑 Pairing Code (código numérico)", value: "pairing" as AuthMode },
+      ],
     });
-  }
 
-  // Conectar a WhatsApp
-  console.log("\n📡 Conectando a WhatsApp...");
-  if (authMode === "qr") {
-    console.log("   Esperando QR code... Escanealo desde WhatsApp > Dispositivos vinculados\n");
-  }
+    let phoneNumber: string | undefined;
+    if (authMode === "pairing") {
+      phoneNumber = await input({
+        message: "Número de teléfono (sin +, sin espacios, ej: 5491112345678):",
+        validate: (v) =>
+          /^\d{10,15}$/.test(v.trim()) ? true : "Ingresá solo números (10-15 dígitos)",
+      });
+    }
 
-  try {
-    const sock = await connectWhatsApp(authMode, phoneNumber?.trim());
+    // Conectar a WhatsApp
+    console.log("\n📡 Conectando a WhatsApp...");
+    if (authMode === "qr") {
+      console.log("   Esperando QR code... Escanealo desde WhatsApp > Dispositivos vinculados\n");
+    }
 
-    // Inicializar listeners de datos
-    initContactsListener();
-    initChannelsListener();
+    try {
+      const sock = await connectWhatsApp(authMode, phoneNumber?.trim());
 
-    // Dar tiempo a la sincronización inicial
-    console.log("⏳ Sincronizando datos de WhatsApp (contactos, chats, grupos)...");
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+      // Inicializar listeners de datos
+      initContactsListener();
+      initChannelsListener();
 
-    // Mostrar menú principal
-    await showMainMenu();
-  } catch (error) {
-    console.error(`\n❌ Error de conexión: ${(error as Error).message}\n`);
-  } finally {
-    stopScheduler();
-    closeDb();
-    process.exit(0);
+      // Dar tiempo a la sincronización inicial
+      console.log("⏳ Sincronizando datos de WhatsApp (contactos, chats, grupos)...");
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Mostrar menú principal
+      await showMainMenu();
+    } catch (error) {
+      console.error(`\n❌ Error de conexión: ${(error as Error).message}\n`);
+    }
   }
 }
 

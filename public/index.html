@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sendora Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+    <!-- Auth Overlay -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="glass-card auth-card">
+            <h2>Conectar a WhatsApp</h2>
+            <p>Elegí un método de autenticación para iniciar el bot.</p>
+            
+            <div class="auth-methods">
+                <button id="btn-auth-qr" class="btn-primary">Código QR</button>
+                <button id="btn-auth-pairing" class="btn-secondary">Pairing Code</button>
+            </div>
+
+            <div id="auth-qr-container" class="auth-container hidden">
+                <p>Escaneá este código desde WhatsApp > Dispositivos vinculados:</p>
+                <canvas id="qrcode-canvas"></canvas>
+            </div>
+
+            <div id="auth-pairing-container" class="auth-container hidden">
+                <input type="text" id="phone-number" placeholder="Ej: 5491122334455">
+                <button id="btn-request-pairing" class="btn-primary">Solicitar Código</button>
+                <div id="pairing-code-display" class="pairing-code hidden"></div>
+            </div>
+            
+            <p id="auth-status" class="auth-status"></p>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>🤖 Sendora</h2>
+                <div class="status-badge" id="conn-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Conectando...</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-tab="send">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                    Enviar Mensaje
+                </button>
+                <button class="nav-btn" data-tab="contacts">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Contactos
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Send Message Tab -->
+            <section id="tab-send" class="tab-pane active">
+                <header class="content-header">
+                    <h1>Nuevo Mensaje</h1>
+                    <p>Enviá textos y archivos a tus contactos o grupos.</p>
+                </header>
+
+                <div class="glass-card form-container">
+                    <form id="send-form">
+                        <div class="form-group">
+                            <label for="target-select">Destino</label>
+                            <select id="target-select" required>
+                                <option value="" disabled selected>Cargando contactos...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="message-text">Mensaje (opcional)</label>
+                            <textarea id="message-text" rows="4" placeholder="Escribí tu mensaje acá..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Archivos Adjuntos (rutas absolutas locales)</label>
+                            <div id="file-list" class="file-list"></div>
+                            <div class="file-input-wrapper">
+                                <input type="text" id="new-file-path" placeholder="Ej: C:\Users\Fotos\imagen.jpg">
+                                <button type="button" id="btn-add-file" class="btn-secondary">Agregar</button>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary" id="btn-send">
+                                Enviar Mensaje
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Contacts Tab -->
+            <section id="tab-contacts" class="tab-pane">
+                <header class="content-header">
+                    <h1>Directorio</h1>
+                    <p>Todos tus contactos y grupos sincronizados desde Turso.</p>
+                </header>
+
+                <div class="glass-card table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Tipo</th>
+                                <th>JID</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contacts-tbody">
+                            <tr><td colspan="3" class="text-center">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
