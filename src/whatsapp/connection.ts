@@ -34,14 +34,19 @@ export function connectWhatsApp(
     try {
       const sessionId = getSessionId();
       const { state, saveCreds } = await useTursoAuthState(sessionId);
+      
+      // Obtenemos la última versión oficial. Hardcodearla da error 405 porque WhatsApp actualiza seguido.
       const { version, isLatest } = await fetchLatestBaileysVersion();
-      console.log(`Usando WhatsApp Web v${version.join(".")} (¿Es la última? ${isLatest})`);
+      console.log(`⚡ Iniciando conexión ultra-rápida (v${version.join(".")} - Latest: ${isLatest})`);
 
       sock = makeWASocket({
         auth: state,
         logger,
         version,
         browser: Browsers.ubuntu("Chrome"),
+        syncFullHistory: false, // Optimización: Ignorar mensajes pasados
+        markOnlineOnConnect: false, // Optimización: No avisar a la red
+        generateHighQualityLinkPreview: false, // Optimización: No renderizar imágenes grandes
       });
 
       // Registrar listeners INMEDIATAMENTE después de crear el socket

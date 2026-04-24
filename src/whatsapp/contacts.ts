@@ -32,20 +32,26 @@ async function loadContacts() {
   }
 }
 
+let saveContactsTimeout: NodeJS.Timeout | null = null;
+
 async function saveContacts() {
-  try {
-    const db = getDb();
-    const sessionId = getSessionId();
-    const data = Object.fromEntries(contactsMap);
-    await db.execute({
-      sql: `INSERT INTO whatsapp_cache (session_id, type, data) 
-            VALUES (?, 'contacts', ?) 
-            ON CONFLICT(session_id, type) DO UPDATE SET data = excluded.data`,
-      args: [sessionId, JSON.stringify(data)],
-    });
-  } catch (error) {
-    console.error("Error guardando contactos en Turso:", error);
-  }
+  if (saveContactsTimeout) clearTimeout(saveContactsTimeout);
+  
+  saveContactsTimeout = setTimeout(async () => {
+    try {
+      const db = getDb();
+      const sessionId = getSessionId();
+      const data = Object.fromEntries(contactsMap);
+      await db.execute({
+        sql: `INSERT INTO whatsapp_cache (session_id, type, data) 
+              VALUES (?, 'contacts', ?) 
+              ON CONFLICT(session_id, type) DO UPDATE SET data = excluded.data`,
+        args: [sessionId, JSON.stringify(data)],
+      });
+    } catch (error) {
+      console.error("Error guardando contactos en Turso:", error);
+    }
+  }, 5000);
 }
 
 /**

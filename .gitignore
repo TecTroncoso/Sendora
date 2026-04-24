@@ -19,6 +19,7 @@ Thumbs.db
 
 # IDE
 .idea/
+.vscode/
 
 # Logs
 *.log
@@ -29,3 +30,7 @@ Thumbs.db
 
 # Sesión local (Multi-tenant)
 .bot_session
+
+# Scripts de sistema y utilidades locales
+.atl/
+abrir_proyecto*
