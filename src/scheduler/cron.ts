@@ -3,12 +3,14 @@ import {
   getScheduledContent,
   updateLastSent,
   logSend,
+  parseContentPaths,
 } from "../db/repository.js";
 import {
   sendTextMessage,
   sendImageMessage,
   sendVideoMessage,
   sendDocumentMessage,
+  sendMixedContent,
   sendWithRateLimit,
 } from "../whatsapp/sender.js";
 
@@ -41,30 +43,41 @@ export async function startScheduler(): Promise<void> {
       console.log(`\n📤 [Scheduler] Enviando a ${item.target_name}...`);
 
       try {
-        await sendWithRateLimit(item.target_jid, async () => {
-          switch (item.content_type) {
-            case "text":
-              await sendTextMessage(item.target_jid, item.content_text!);
-              break;
-            case "image":
-              await sendImageMessage(
-                item.target_jid,
-                item.content_path!,
-                item.content_text ?? undefined
-              );
-              break;
-            case "video":
-              await sendVideoMessage(
-                item.target_jid,
-                item.content_path!,
-                item.content_text ?? undefined
-              );
-              break;
-            case "document":
-              await sendDocumentMessage(item.target_jid, item.content_path!);
-              break;
-          }
-        });
+        if (item.content_type === "mixed") {
+          // Tipo nuevo: envío mixto con múltiples archivos
+          const filePaths = parseContentPaths(item);
+          await sendMixedContent(
+            item.target_jid,
+            item.content_text ?? undefined,
+            filePaths
+          );
+        } else {
+          // Tipos legacy: un solo archivo
+          await sendWithRateLimit(item.target_jid, async () => {
+            switch (item.content_type) {
+              case "text":
+                await sendTextMessage(item.target_jid, item.content_text!);
+                break;
+              case "image":
+                await sendImageMessage(
+                  item.target_jid,
+                  item.content_path!,
+                  item.content_text ?? undefined
+                );
+                break;
+              case "video":
+                await sendVideoMessage(
+                  item.target_jid,
+                  item.content_path!,
+                  item.content_text ?? undefined
+                );
+                break;
+              case "document":
+                await sendDocumentMessage(item.target_jid, item.content_path!);
+                break;
+            }
+          });
+        }
 
         await updateLastSent(item.id);
         await logSend(item.target_id, item.id, "sent");
@@ -83,10 +96,11 @@ export async function startScheduler(): Promise<void> {
       image: "🖼️",
       video: "🎥",
       document: "📄",
+      mixed: "📦",
     };
 
     console.log(
-      `  🕐 #${item.id} ${typeEmoji[item.content_type]} → ${item.target_name} | ${item.cron_expression}`
+      `  🕐 #${item.id} ${typeEmoji[item.content_type] ?? "❓"} → ${item.target_name} | ${item.cron_expression}`
     );
   }
 

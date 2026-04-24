@@ -21,7 +21,8 @@ Gracias a la integración con **Turso (libSQL)**, Sendora opera con una arquitec
 - **☁️ 100% Stateless**: Todo el estado criptográfico de WhatsApp, contactos, canales e historial de configuraciones se guarda cifrado y distribuido en Turso.
 - **🏢 Arquitectura Multi-Tenant**: Cada instalación genera un `.bot_session` único. Puedes tener cientos de bots corriendo en el mismo servidor o base de datos sin colisión de datos.
 - **⚡ Sincronización en Tiempo Real**: Si agregas un contacto a tu agenda o te unes a un canal nuevo en tu celular, el bot lo detecta y lo guarda automáticamente en milisegundos gracias a sus listeners de eventos.
-- **🚀 Ultra Baja Latencia**: Optimizado al milisegundo. Bypass de historial antiguo, debounce de I/O en base de datos y reducción de huella de red (`syncFullHistory: false`).
+- **🚀 Ultra Baja Latencia**: Optimizado al milisegundo. Bypass de historial antiguo, agrupamiento de consultas N+1 en bases de datos (IN queries), debounce de I/O y reducción de huella de red (`syncFullHistory: false`).
+- **📦 Envíos Mixtos (Multi-archivo)**: Soporta enviar a la vez textos, múltiples imágenes, videos y documentos en un solo flujo, adaptándose inteligentemente a las restricciones anti-spam de WhatsApp.
 - **📅 Programador Avanzado (Cron)**: Sistema interno robusto para programar envíos recurrentes a contactos, grupos y canales (newsletters).
 - **🛡️ Interfaz Limpia**: CLI interactiva impulsada por `@inquirer/prompts` libre de logs basura o JSONs confusos.
 

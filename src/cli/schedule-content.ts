@@ -1,4 +1,4 @@
-import { select, input } from "@inquirer/prompts";
+import { select, input, confirm } from "@inquirer/prompts";
 import {
   getTargets,
   addScheduledContent,
@@ -41,35 +41,56 @@ async function scheduleNewContent(): Promise<void> {
     })),
   });
 
-  // Tipo de contenido
-  const contentType = await select({
-    message: "Tipo de contenido:",
-    choices: [
-      { name: "📝 Texto", value: "text" as const },
-      { name: "🖼️  Imagen", value: "image" as const },
-      { name: "🎥 Video", value: "video" as const },
-      { name: "📄 Documento", value: "document" as const },
-    ],
+  // Texto del mensaje
+  let contentText = await input({
+    message: "Texto del mensaje (enter para enviar solo archivos):",
+  });
+  if (!contentText.trim()) contentText = "";
+
+  // Recolectar archivos
+  const filePaths: string[] = [];
+  let addMoreFiles = await confirm({
+    message: "¿Querés adjuntar archivos (fotos, videos, documentos)?",
+    default: false,
   });
 
-  let contentText: string | undefined;
-  let contentPath: string | undefined;
-
-  if (contentType === "text") {
-    contentText = await input({
-      message: "Escribí el mensaje:",
-      validate: (v) => (v.trim().length > 0 ? true : "El mensaje no puede estar vacío"),
+  while (addMoreFiles) {
+    const path = await input({
+      message: "Ruta absoluta al archivo:",
+      validate: (v) => (v.trim() ? true : "La ruta no puede estar vacía"),
     });
+    filePaths.push(path.trim());
+
+    addMoreFiles = await confirm({
+      message: "¿Querés agregar otro archivo más?",
+      default: false,
+    });
+  }
+
+  if (!contentText && filePaths.length === 0) {
+    console.log("\n⚠️  Operación cancelada: No hay texto ni archivos para programar.\n");
+    return;
+  }
+
+  // Determinar content_type automáticamente
+  let contentType: ScheduledContent["content_type"];
+  let contentPath: string | string[] | undefined;
+
+  if (filePaths.length === 0) {
+    contentType = "text";
+  } else if (filePaths.length === 1) {
+    // Un solo archivo: usar tipo legacy para compatibilidad
+    const ext = filePaths[0].split(".").pop()?.toLowerCase() ?? "";
+    const imageExts = ["jpg", "jpeg", "png", "gif", "webp"];
+    const videoExts = ["mp4", "avi", "mov"];
+    if (imageExts.includes(ext)) contentType = "image";
+    else if (videoExts.includes(ext)) contentType = "video";
+    else contentType = "document";
+    contentPath = filePaths[0];
   } else {
-    contentPath = await input({
-      message: `Ruta al archivo (${contentType}):`,
-      validate: (v) => (v.trim().length > 0 ? true : "La ruta no puede estar vacía"),
-    });
-
-    contentText = await input({
-      message: "Caption (opcional, enter para omitir):",
-    });
-    if (contentText.trim() === "") contentText = undefined;
+    // Múltiples archivos: tipo mixed con array JSON
+    contentType = "mixed";
+    contentPath = filePaths;
   }
 
   // Expresión cron
@@ -91,11 +112,14 @@ async function scheduleNewContent(): Promise<void> {
     targetId,
     contentType,
     cronExpression.trim(),
-    contentText,
+    contentText || undefined,
     contentPath
   );
 
   console.log(`\n✅ Contenido programado con ID #${id}`);
+  if (filePaths.length > 0) {
+    console.log(`   📎 ${filePaths.length} archivo(s) adjuntado(s)`);
+  }
   console.log("   Iniciá el scheduler desde el menú para activar los envíos.\n");
 }
 
@@ -114,15 +138,24 @@ async function listScheduledContent(): Promise<void> {
     image: "🖼️",
     video: "🎥",
     document: "📄",
+    mixed: "📦",
   };
 
   for (const c of content) {
     const status = c.active ? "🟢" : "🔴";
     console.log(
-      `  ${status} #${c.id} ${typeEmoji[c.content_type]} → ${c.target_name} | cron: ${c.cron_expression}`
+      `  ${status} #${c.id} ${typeEmoji[c.content_type] ?? "❓"} → ${c.target_name} | cron: ${c.cron_expression}`
     );
     if (c.content_text) {
       console.log(`     "${c.content_text.substring(0, 60)}${c.content_text.length > 60 ? "..." : ""}"`);
+    }
+    if (c.content_type === "mixed" && c.content_path) {
+      try {
+        const paths = JSON.parse(c.content_path);
+        if (Array.isArray(paths)) {
+          console.log(`     📎 ${paths.length} archivo(s)`);
+        }
+      } catch { /* legacy path, ignore */ }
     }
     if (c.last_sent_at) {
       console.log(`     Último envío: ${c.last_sent_at}`);
@@ -142,7 +175,7 @@ async function listScheduledContent(): Promise<void> {
     const contentId = await select({
       message: "Seleccioná contenido para eliminar:",
       choices: content.map((c) => ({
-        name: `#${c.id} ${typeEmoji[c.content_type]} → ${c.target_name} (${c.cron_expression})`,
+        name: `#${c.id} ${typeEmoji[c.content_type] ?? "❓"} → ${c.target_name} (${c.cron_expression})`,
         value: c.id,
       })),
     });

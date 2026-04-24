@@ -23,25 +23,28 @@ export const useTursoAuthState = async (sessionId: string): Promise<{ state: Aut
       keys: {
         get: async (type, ids) => {
           const data: { [id: string]: any } = {};
+          if (ids.length === 0) return data;
           
-          await Promise.all(
-            ids.map(async (id) => {
-              let value: any = null;
-              const key = `${type}-${id}`;
-              const row = await db.execute({
-                sql: "SELECT data FROM auth_state WHERE session_id = ? AND key_id = ?",
-                args: [sessionId, key],
-              });
-              
-              if (row.rows.length > 0) {
-                value = JSON.parse(row.rows[0].data as string, BufferJSON.reviver);
-              }
-              
+          try {
+            const keys = ids.map((id) => `${type}-${id}`);
+            const placeholders = keys.map(() => "?").join(",");
+            
+            const result = await db.execute({
+              sql: `SELECT key_id, data FROM auth_state WHERE session_id = ? AND key_id IN (${placeholders})`,
+              args: [sessionId, ...keys],
+            });
+            
+            for (const row of result.rows) {
+              const keyId = row.key_id as string;
+              const id = keyId.replace(`${type}-`, "");
+              const value = JSON.parse(row.data as string, BufferJSON.reviver);
               if (value) {
                 data[id] = value;
               }
-            })
-          );
+            }
+          } catch (error) {
+            console.error("❌ Error en AuthState.get:", error);
+          }
           
           return data;
         },

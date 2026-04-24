@@ -74,30 +74,55 @@ export interface ScheduledContent {
   id: number;
   session_id: string;
   target_id: number;
-  content_type: "text" | "image" | "video" | "document";
+  content_type: "text" | "image" | "video" | "document" | "mixed";
   content_text: string | null;
-  content_path: string | null;
+  content_path: string | null; // JSON array string for 'mixed', single path for legacy types
   cron_expression: string;
   last_sent_at: string | null;
   active: number;
   created_at: string;
 }
 
+/**
+ * Agrega contenido programado.
+ * Para tipo 'mixed', contentPath debe ser un JSON.stringify de un string[] de rutas.
+ * Para tipos legacy (image, video, document), contentPath es una ruta simple.
+ */
 export async function addScheduledContent(
   targetId: number,
   contentType: ScheduledContent["content_type"],
   cronExpression: string,
   contentText?: string,
-  contentPath?: string
+  contentPath?: string | string[]
 ): Promise<number> {
   const db = getDb();
   const sessionId = getSessionId();
+
+  // Si viene un array de rutas, lo serializamos como JSON
+  const pathValue = Array.isArray(contentPath)
+    ? JSON.stringify(contentPath)
+    : (contentPath ?? null);
+
   const result = await db.execute({
     sql: `INSERT INTO scheduled_content (session_id, target_id, content_type, content_text, content_path, cron_expression)
           VALUES (?, ?, ?, ?, ?, ?)`,
-    args: [sessionId, targetId, contentType, contentText ?? null, contentPath ?? null, cronExpression],
+    args: [sessionId, targetId, contentType, contentText ?? null, pathValue, cronExpression],
   });
   return Number(result.lastInsertRowid);
+}
+
+/**
+ * Parsea content_path: si es JSON array lo devuelve como string[], si no, como array de un solo elemento.
+ */
+export function parseContentPaths(content: ScheduledContent): string[] {
+  if (!content.content_path) return [];
+  try {
+    const parsed = JSON.parse(content.content_path);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    // No es JSON, es una ruta simple (legacy)
+  }
+  return [content.content_path];
 }
 
 export async function getScheduledContent(

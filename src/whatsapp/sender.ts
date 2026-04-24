@@ -65,6 +65,49 @@ export async function sendDocumentMessage(
 }
 
 /**
+ * Envía una mezcla de archivos y texto secuencialmente.
+ * Asocia el texto como caption al primer archivo multimedia (imagen o video) si existe.
+ * Si no hay multimedia o quedan textos sin enviar, lo manda como mensaje de texto.
+ */
+export async function sendMixedContent(
+  jid: string,
+  text?: string,
+  filePaths?: string[]
+): Promise<void> {
+  let textSent = false;
+
+  if (filePaths && filePaths.length > 0) {
+    for (const path of filePaths) {
+      const mimeType = getMimeType(path);
+      const isMedia = mimeType.startsWith("image/") || mimeType.startsWith("video/");
+
+      let caption: string | undefined = undefined;
+      if (isMedia && text && !textSent) {
+        caption = text;
+        textSent = true;
+      }
+
+      if (mimeType.startsWith("image/")) {
+        await sendImageMessage(jid, path, caption);
+      } else if (mimeType.startsWith("video/")) {
+        await sendVideoMessage(jid, path, caption);
+      } else {
+        await sendDocumentMessage(jid, path);
+      }
+
+      // Pequeño delay entre envíos para que lleguen en orden y no saturen WhatsApp
+      await delay(1500); 
+    }
+  }
+
+  // Si había texto pero no se envió (ej: porque solo eran documentos o no había archivos)
+  if (text && !textSent) {
+    await sendTextMessage(jid, text);
+    await delay(1500);
+  }
+}
+
+/**
  * Envía un mensaje con rate limiting.
  * Usa un delay configurable entre envíos para evitar bans.
  */
