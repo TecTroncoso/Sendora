@@ -98,6 +98,24 @@ export function initContactsListener(): void {
       saveContacts();
     }
   });
+
+  // Nuevos contactos agregados en tiempo real
+  sock.ev.on("contacts.upsert", (contacts) => {
+    let inserted = false;
+    for (const contact of contacts) {
+      if (contact.id && !contact.id.endsWith("@g.us") && !contact.id.includes("newsletter")) {
+        contactsMap.set(contact.id, {
+          jid: contact.id,
+          name: contact.notify ?? contact.name ?? contact.verifiedName ?? contact.id.split("@")[0],
+          number: contact.id.split("@")[0],
+        });
+        inserted = true;
+      }
+    }
+    if (inserted) {
+      saveContacts();
+    }
+  });
 }
 
 export function getContacts(): Contact[] {
