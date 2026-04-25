@@ -10,8 +10,9 @@ export interface Contact {
 
 // Almacén en memoria de contactos sincronizados
 const contactsMap = new Map<string, Contact>();
+let firstSyncDone = false;
 
-async function loadContacts() {
+async function loadContacts(): Promise<void> {
   try {
     const db = getDb();
     const sessionId = getSessionId();
@@ -25,7 +26,10 @@ async function loadContacts() {
       for (const [jid, contact] of Object.entries(parsed)) {
         contactsMap.set(jid, contact as Contact);
       }
-      console.log(`📇 ${contactsMap.size} contactos cargados desde Turso`);
+      if (contactsMap.size > 0) {
+        console.log(`📇 ${contactsMap.size} contactos cargados desde caché`);
+        firstSyncDone = true;
+      }
     }
   } catch (error) {
     console.error("Error leyendo contactos desde Turso:", error);
@@ -34,10 +38,14 @@ async function loadContacts() {
 
 let saveContactsTimeout: NodeJS.Timeout | null = null;
 
-async function saveContacts() {
+/**
+ * Guarda contactos en Turso. 
+ * immediate=true para el primer sync (no debounce), false para updates incrementales.
+ */
+async function saveContacts(immediate = false) {
   if (saveContactsTimeout) clearTimeout(saveContactsTimeout);
-  
-  saveContactsTimeout = setTimeout(async () => {
+
+  const doSave = async () => {
     try {
       const db = getDb();
       const sessionId = getSessionId();
@@ -51,17 +59,27 @@ async function saveContacts() {
     } catch (error) {
       console.error("Error guardando contactos en Turso:", error);
     }
-  }, 5000);
+  };
+
+  if (immediate) {
+    await doSave();
+  } else {
+    saveContactsTimeout = setTimeout(doSave, 3000);
+  }
 }
+
+// Resolvers para waitForSync()
+let syncResolver: (() => void) | null = null;
 
 /**
  * Inicializa los listeners de contactos.
- * Llamar DESPUÉS de conectar.
+ * Llamar DESPUÉS de conectar. Espera a que la caché se cargue.
  */
-export function initContactsListener(): void {
+export async function initContactsListener(): Promise<void> {
   const sock = getSocket();
   
-  loadContacts();
+  // Cargar caché ANTES de registrar listeners (awaited)
+  await loadContacts();
 
   // Sync inicial: messaging-history.set trae contactos en bulk
   sock.ev.on("messaging-history.set", ({ contacts }) => {
@@ -76,7 +94,20 @@ export function initContactsListener(): void {
         }
       }
       console.log(`📇 ${contactsMap.size} contactos sincronizados`);
-      saveContacts();
+      
+      // Primer sync: guardar INMEDIATAMENTE (sin debounce)
+      if (!firstSyncDone) {
+        firstSyncDone = true;
+        saveContacts(true);
+      } else {
+        saveContacts();
+      }
+
+      // Resolver la promesa de waitForSync si alguien está esperando
+      if (syncResolver) {
+        syncResolver();
+        syncResolver = null;
+      }
     }
   });
 
@@ -115,6 +146,25 @@ export function initContactsListener(): void {
     if (inserted) {
       saveContacts();
     }
+  });
+}
+
+/**
+ * Espera a que llegue el primer batch de contactos de WhatsApp.
+ * Si ya hay contactos en caché, resuelve inmediatamente.
+ * Timeout de 8 segundos para no bloquear indefinidamente.
+ */
+export function waitForSync(timeoutMs = 8000): Promise<void> {
+  if (contactsMap.size > 0) return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    syncResolver = resolve;
+    setTimeout(() => {
+      if (syncResolver) {
+        syncResolver = null;
+        resolve(); // Timeout — seguimos sin contactos pero no bloqueamos
+      }
+    }, timeoutMs);
   });
 }
 

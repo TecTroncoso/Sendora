@@ -3,7 +3,7 @@ import { config, validateConfig } from "./config/env.js";
 import { initDatabase } from "./db/schema.js";
 import { closeDb } from "./db/client.js";
 import { connectWhatsApp, type AuthMode } from "./whatsapp/connection.js";
-import { initContactsListener } from "./whatsapp/contacts.js";
+import { initContactsListener, waitForSync } from "./whatsapp/contacts.js";
 import { initChannelsListener } from "./whatsapp/channels.js";
 import { showMainMenu } from "./cli/menu.js";
 import { stopScheduler } from "./scheduler/cron.js";
@@ -57,8 +57,8 @@ async function main(): Promise<void> {
       console.log("✅ Sesión guardada detectada. Auto-conectando al bot...");
       try {
         await connectWhatsApp("qr");
-        initContactsListener();
-        initChannelsListener();
+        await initContactsListener();
+        await initChannelsListener();
       } catch (err) {
         console.error("Error al auto-conectar:", err);
       }
@@ -95,13 +95,14 @@ async function main(): Promise<void> {
     try {
       const sock = await connectWhatsApp(authMode, phoneNumber?.trim());
 
-      // Inicializar listeners de datos
-      initContactsListener();
-      initChannelsListener();
+      // Inicializar listeners de datos (await para cargar caché)
+      await initContactsListener();
+      await initChannelsListener();
 
-      // Dar tiempo a la sincronización inicial
+      // Esperar sincronización inteligente: si hay caché resuelve al toque,
+      // si no, espera hasta 8s al primer batch de messaging-history.set
       console.log("⏳ Sincronizando datos de WhatsApp...");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await waitForSync();
 
       // Mostrar menú principal
       await showMainMenu();

@@ -10,7 +10,7 @@ export interface Channel {
 // Almacén en memoria de canales/newsletters
 const channelsMap = new Map<string, Channel>();
 
-async function loadChannels() {
+async function loadChannels(): Promise<void> {
   try {
     const db = getDb();
     const sessionId = getSessionId();
@@ -24,7 +24,9 @@ async function loadChannels() {
       for (const [jid, channel] of Object.entries(parsed)) {
         channelsMap.set(jid, channel as Channel);
       }
-      console.log(`📢 ${channelsMap.size} canales cargados desde Turso`);
+      if (channelsMap.size > 0) {
+        console.log(`📢 ${channelsMap.size} canales cargados desde caché`);
+      }
     }
   } catch (error) {
     console.error("Error leyendo canales desde Turso:", error);
@@ -32,11 +34,12 @@ async function loadChannels() {
 }
 
 let saveChannelsTimeout: NodeJS.Timeout | null = null;
+let firstChannelSyncDone = false;
 
-async function saveChannels() {
+async function saveChannels(immediate = false) {
   if (saveChannelsTimeout) clearTimeout(saveChannelsTimeout);
 
-  saveChannelsTimeout = setTimeout(async () => {
+  const doSave = async () => {
     try {
       const db = getDb();
       const sessionId = getSessionId();
@@ -50,17 +53,24 @@ async function saveChannels() {
     } catch (error) {
       console.error("Error guardando canales en Turso:", error);
     }
-  }, 5000);
+  };
+
+  if (immediate) {
+    await doSave();
+  } else {
+    saveChannelsTimeout = setTimeout(doSave, 3000);
+  }
 }
 
 /**
  * Inicializa listener para capturar newsletters del historial.
- * Llamar DESPUÉS de conectar.
+ * Llamar DESPUÉS de conectar. Espera a que la caché se cargue.
  */
-export function initChannelsListener(): void {
+export async function initChannelsListener(): Promise<void> {
   const sock = getSocket();
   
-  loadChannels();
+  // Cargar caché ANTES de registrar listeners (awaited)
+  await loadChannels();
 
   sock.ev.on("messaging-history.set", ({ chats }) => {
     if (chats) {
@@ -74,7 +84,12 @@ export function initChannelsListener(): void {
       }
       if (channelsMap.size > 0) {
         console.log(`📢 ${channelsMap.size} canales/newsletters sincronizados`);
-        saveChannels();
+        if (!firstChannelSyncDone) {
+          firstChannelSyncDone = true;
+          saveChannels(true);
+        } else {
+          saveChannels();
+        }
       }
     }
   });
