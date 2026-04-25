@@ -7,11 +7,24 @@ export interface Group {
   isAdmin: boolean;
 }
 
+// ═══ CACHE CON TTL ═══
+const GROUPS_TTL_MS = 5 * 60 * 1000; // 5 minutos
+let cachedGroups: Group[] | null = null;
+let cacheTimestamp = 0;
+
 /**
  * Obtiene todos los grupos en los que participamos.
- * Usa groupFetchAllParticipating() de Baileys.
+ * Usa caché en memoria con TTL de 5 minutos para evitar
+ * llamadas repetidas a groupFetchAllParticipating().
  */
-export async function getGroups(): Promise<Group[]> {
+export async function getGroups(forceRefresh = false): Promise<Group[]> {
+  const now = Date.now();
+
+  // Devolver cache si es válido
+  if (!forceRefresh && cachedGroups && (now - cacheTimestamp) < GROUPS_TTL_MS) {
+    return cachedGroups;
+  }
+
   const sock = getSocket();
   const groupsMetadata = await sock.groupFetchAllParticipating();
 
@@ -33,5 +46,14 @@ export async function getGroups(): Promise<Group[]> {
     });
   }
 
-  return groups.sort((a, b) => a.name.localeCompare(b.name));
+  cachedGroups = groups.sort((a, b) => a.name.localeCompare(b.name));
+  cacheTimestamp = now;
+
+  return cachedGroups;
+}
+
+/** Invalida la caché manualmente (útil si el usuario sabe que cambió algo) */
+export function invalidateGroupsCache(): void {
+  cachedGroups = null;
+  cacheTimestamp = 0;
 }

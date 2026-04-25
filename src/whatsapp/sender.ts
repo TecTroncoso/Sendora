@@ -1,9 +1,27 @@
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
+import { createReadStream } from "fs";
 import { basename } from "path";
 import { getSocket } from "./connection.js";
 import { config } from "../config/env.js";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Umbral para usar streaming en lugar de cargar en memoria (10MB)
+const STREAM_THRESHOLD_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Lee un archivo de forma inteligente:
+ * - < 10MB: Buffer (rápido, bajo overhead)
+ * - >= 10MB: ReadStream (no carga todo en RAM)
+ */
+async function smartRead(filePath: string): Promise<Buffer | ReturnType<typeof createReadStream>> {
+  const fileStat = await stat(filePath);
+  if (fileStat.size >= STREAM_THRESHOLD_BYTES) {
+    console.log(`📂 Archivo grande (${(fileStat.size / 1024 / 1024).toFixed(1)}MB) — usando streaming`);
+    return createReadStream(filePath);
+  }
+  return readFile(filePath);
+}
 
 /**
  * Envía un mensaje de texto.
@@ -22,9 +40,9 @@ export async function sendImageMessage(
   caption?: string
 ): Promise<void> {
   const sock = getSocket();
-  const imageBuffer = await readFile(imagePath);
+  const imageData = await smartRead(imagePath);
   await sock.sendMessage(jid, {
-    image: imageBuffer,
+    image: imageData as any,
     caption: caption ?? undefined,
     mimetype: getMimeType(imagePath),
   });
@@ -39,9 +57,9 @@ export async function sendVideoMessage(
   caption?: string
 ): Promise<void> {
   const sock = getSocket();
-  const videoBuffer = await readFile(videoPath);
+  const videoData = await smartRead(videoPath);
   await sock.sendMessage(jid, {
-    video: videoBuffer,
+    video: videoData as any,
     caption: caption ?? undefined,
     mimetype: getMimeType(videoPath),
   });
@@ -56,9 +74,9 @@ export async function sendDocumentMessage(
   filename?: string
 ): Promise<void> {
   const sock = getSocket();
-  const docBuffer = await readFile(filePath);
+  const docData = await smartRead(filePath);
   await sock.sendMessage(jid, {
-    document: docBuffer,
+    document: docData as any,
     fileName: filename ?? basename(filePath),
     mimetype: getMimeType(filePath),
   });
@@ -95,15 +113,15 @@ export async function sendMixedContent(
         await sendDocumentMessage(jid, path);
       }
 
-      // Pequeño delay entre envíos para que lleguen en orden y no saturen WhatsApp
-      await delay(1500); 
+      // Delay optimizado entre archivos al MISMO destinatario (800ms)
+      await delay(config.scheduler.interFileDelayMs);
     }
   }
 
   // Si había texto pero no se envió (ej: porque solo eran documentos o no había archivos)
   if (text && !textSent) {
     await sendTextMessage(jid, text);
-    await delay(1500);
+    await delay(config.scheduler.interFileDelayMs);
   }
 }
 
@@ -116,7 +134,7 @@ export async function sendWithRateLimit(
   sendFn: () => Promise<void>
 ): Promise<void> {
   await sendFn();
-  await delay(config.scheduler.defaultDelayMs);
+  await delay(config.scheduler.rateLimitDelayMs);
 }
 
 function getMimeType(filePath: string): string {
@@ -130,12 +148,15 @@ function getMimeType(filePath: string): string {
     mp4: "video/mp4",
     avi: "video/x-msvideo",
     mov: "video/quicktime",
+    mkv: "video/x-matroska",
     pdf: "application/pdf",
     doc: "application/msword",
     docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     xls: "application/vnd.ms-excel",
     xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     zip: "application/zip",
+    rar: "application/x-rar-compressed",
+    "7z": "application/x-7z-compressed",
     txt: "text/plain",
   };
   return mimeTypes[ext ?? ""] ?? "application/octet-stream";

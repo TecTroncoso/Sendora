@@ -9,7 +9,8 @@ export const config = {
     authDir: "auth_info",
   },
   scheduler: {
-    defaultDelayMs: 3000, // delay entre mensajes para evitar ban
+    interFileDelayMs: 800,   // delay entre archivos al mismo destinatario
+    rateLimitDelayMs: 1500,  // delay entre envíos programados para evitar ban
   },
 } as const;
 

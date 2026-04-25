@@ -6,7 +6,7 @@
     <title>Sendora Dashboard</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
     <!-- Auth Overlay -->
@@ -22,7 +22,7 @@
 
             <div id="auth-qr-container" class="auth-container hidden">
                 <p>Escaneá este código desde WhatsApp > Dispositivos vinculados:</p>
-                <canvas id="qrcode-canvas"></canvas>
+                <div id="qrcode-box" style="display: flex; justify-content: center; margin-top: 1rem; background: white; padding: 10px; border-radius: 8px; width: 270px; margin-left: auto; margin-right: auto;"></div>
             </div>
 
             <div id="auth-pairing-container" class="auth-container hidden">

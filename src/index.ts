@@ -8,6 +8,8 @@ import { initChannelsListener } from "./whatsapp/channels.js";
 import { showMainMenu } from "./cli/menu.js";
 import { stopScheduler } from "./scheduler/cron.js";
 import { startWebServer } from "./web/server.js";
+import { getSessionId } from "./config/session.js";
+import { hasValidSession } from "./whatsapp/authState.js";
 
 // Silenciar console.info que usa libsignal internamente (evita el spam de "Closing session")
 const originalConsoleInfo = console.info;
@@ -46,7 +48,22 @@ async function main(): Promise<void> {
   });
 
   if (interfaceMode === "web") {
+    const sessionId = getSessionId();
+    const isRegistered = await hasValidSession(sessionId);
+
     await startWebServer(3000);
+    
+    if (isRegistered) {
+      console.log("✅ Sesión guardada detectada. Auto-conectando al bot...");
+      try {
+        await connectWhatsApp("qr");
+        initContactsListener();
+        initChannelsListener();
+      } catch (err) {
+        console.error("Error al auto-conectar:", err);
+      }
+    }
+
     console.log("Presioná Ctrl+C para detener el servidor.");
     // Mantenemos el proceso vivo
     await new Promise(() => {});
@@ -83,8 +100,8 @@ async function main(): Promise<void> {
       initChannelsListener();
 
       // Dar tiempo a la sincronización inicial
-      console.log("⏳ Sincronizando datos de WhatsApp (contactos, chats, grupos)...");
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      console.log("⏳ Sincronizando datos de WhatsApp...");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Mostrar menú principal
       await showMainMenu();

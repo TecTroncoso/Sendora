@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnPairing: document.getElementById('btn-auth-pairing'),
         qrContainer: document.getElementById('auth-qr-container'),
         pairingContainer: document.getElementById('auth-pairing-container'),
-        canvas: document.getElementById('qrcode-canvas'),
+        qrBox: document.getElementById('qrcode-box'),
         phoneInput: document.getElementById('phone-number'),
         btnRequestPairing: document.getElementById('btn-request-pairing'),
         pairingCodeDisplay: document.getElementById('pairing-code-display'),
@@ -98,8 +98,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sseSource.addEventListener('qr', (e) => {
             const data = JSON.parse(e.data);
-            QRCode.toCanvas(authElements.canvas, data.qr, { width: 250 }, (error) => {
-                if (error) console.error(error);
+            authElements.qrBox.innerHTML = ''; // Limpiar código anterior si existe
+            new QRCode(authElements.qrBox, {
+                text: data.qr,
+                width: 250,
+                height: 250,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.L
             });
             authElements.status.textContent = 'Esperando escaneo...';
         });
@@ -127,6 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await res.json();
             if (data.success) {
+                authElements.status.textContent = mode === 'qr' ? 'Generando código QR...' : 'Solicitando código de emparejamiento...';
                 startSSE();
             } else {
                 authElements.status.textContent = 'Error: ' + data.error;
