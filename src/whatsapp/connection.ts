@@ -80,7 +80,7 @@ export function connectWhatsApp(
         logger,
         version,
         browser: Browsers.ubuntu("Chrome"),
-        syncFullHistory: false,
+        syncFullHistory: true,
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
       });
