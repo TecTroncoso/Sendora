@@ -81,18 +81,40 @@ export async function initContactsListener(): Promise<void> {
   // Cargar caché ANTES de registrar listeners (awaited)
   await loadContacts();
 
-  // Sync inicial: messaging-history.set trae contactos en bulk
-  sock.ev.on("messaging-history.set", ({ contacts }) => {
+  // Sync inicial: messaging-history.set trae contactos y chats
+  sock.ev.on("messaging-history.set", ({ contacts, chats }) => {
+    let inserted = false;
+
     if (contacts) {
       for (const contact of contacts) {
-        if (contact.id && !contact.id.endsWith("@g.us") && !contact.id.includes("newsletter")) {
+        if (contact.id && !contact.id.endsWith("@g.us") && !contact.id.includes("newsletter") && contact.id !== "status@broadcast") {
           contactsMap.set(contact.id, {
             jid: contact.id,
             name: contact.notify ?? contact.name ?? contact.verifiedName ?? contact.id.split("@")[0],
             number: contact.id.split("@")[0],
           });
+          inserted = true;
         }
       }
+    }
+
+    // Extraer contactos de los chats (útil cuando syncFullHistory es false)
+    if (chats) {
+      for (const chat of chats) {
+        if (chat.id && !chat.id.endsWith("@g.us") && !chat.id.includes("newsletter") && chat.id !== "status@broadcast") {
+          if (!contactsMap.has(chat.id)) {
+            contactsMap.set(chat.id, {
+              jid: chat.id,
+              name: chat.name ?? chat.id.split("@")[0],
+              number: chat.id.split("@")[0],
+            });
+            inserted = true;
+          }
+        }
+      }
+    }
+
+    if (inserted) {
       console.log(`📇 ${contactsMap.size} contactos sincronizados`);
       
       // Primer sync: guardar INMEDIATAMENTE (sin debounce)
@@ -102,12 +124,33 @@ export async function initContactsListener(): Promise<void> {
       } else {
         saveContacts();
       }
+    }
 
-      // Resolver la promesa de waitForSync si alguien está esperando
-      if (syncResolver) {
-        syncResolver();
-        syncResolver = null;
+    // Resolver siempre que llegue el evento (tenga o no contactos explícitos)
+    if (syncResolver) {
+      syncResolver();
+      syncResolver = null;
+    }
+  });
+
+  // Extraer contactos de chats nuevos o actualizados
+  sock.ev.on("chats.upsert", (chats) => {
+    let inserted = false;
+    for (const chat of chats) {
+      if (chat.id && !chat.id.endsWith("@g.us") && !chat.id.includes("newsletter") && chat.id !== "status@broadcast") {
+        if (!contactsMap.has(chat.id) || chat.name) {
+          const existing = contactsMap.get(chat.id);
+          contactsMap.set(chat.id, {
+            jid: chat.id,
+            name: chat.name ?? existing?.name ?? chat.id.split("@")[0],
+            number: chat.id.split("@")[0],
+          });
+          inserted = true;
+        }
       }
+    }
+    if (inserted) {
+      saveContacts();
     }
   });
 
