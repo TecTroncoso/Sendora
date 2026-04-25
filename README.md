@@ -21,7 +21,7 @@ Gracias a la integración con **Turso (libSQL)**, Sendora opera con una arquitec
 - **☁️ 100% Stateless**: Todo el estado criptográfico de WhatsApp, contactos, canales e historial de configuraciones se guarda cifrado y distribuido en Turso.
 - **🖥️ Dual-Mode (CLI & Web UI)**: Usá el bot desde una **CLI interactiva** en la terminal, o cambiá al **Dashboard Web Premium** (Express + SSE) para autenticación en tiempo real (QR / Pairing Code), envío de mensajes y gestión completa desde el navegador.
 - **🏢 Arquitectura Multi-Tenant**: Cada instalación genera un `.bot_session` único. Podés tener cientos de bots corriendo en el mismo servidor o base de datos sin colisión de datos.
-- **⚡ Sincronización en Tiempo Real**: Si agregás un contacto a tu agenda o te unís a un canal nuevo en tu celular, el bot lo detecta y lo guarda automáticamente en milisegundos gracias a sus listeners de eventos.
+- **⚡ Sincronización en Tiempo Real**: Contactos, canales y grupos se sincronizan automáticamente al conectar. Los listeners se registran **antes** de que la conexión abra (patrón `onSocketCreated`) para capturar el evento `messaging-history.set` que Baileys dispara durante el handshake.
 - **🚀 Ultra Baja Latencia**: Optimizado al milisegundo. Caché en memoria para claves criptográficas Signal, agrupamiento de consultas N+1 (IN queries), debounce de I/O, caché TTL para API de grupos y versión de Baileys, y streaming inteligente de archivos.
 - **📦 Envíos Mixtos (Multi-archivo)**: Soporta enviar a la vez textos, múltiples imágenes, videos y documentos en un solo flujo, adaptándose inteligentemente a las restricciones anti-spam de WhatsApp.
 - **📅 Programador Avanzado (Cron)**: Sistema interno robusto para programar envíos recurrentes a contactos, grupos y canales (newsletters).
@@ -57,6 +57,7 @@ Sendora implementa un pipeline de optimización extrema para garantizar la menor
 | **Schema** | Versionado de migraciones. Skip automático si la DB está actualizada. | Arranque instantáneo en ejecuciones posteriores |
 | **Credentials** | Debounce de 500ms en `saveCreds` | Reduce writes a Turso durante handshakes |
 | **Baileys Version** | Caché de versión con TTL de 1 hora | Evita HTTP a GitHub en reconexiones |
+| **Contact Sync** | Listeners pre-conexión via `onSocketCreated` callback | Captura 100% de eventos de historial |
 
 ## 🌐 Web Dashboard
 
@@ -142,8 +143,8 @@ src/
 │   └── repository.ts   # Queries para targets, contenido y logs
 ├── whatsapp/
 │   ├── authState.ts    # Auth state con caché in-memory write-through
-│   ├── connection.ts   # Conexión Baileys + caché de versión
-│   ├── contacts.ts     # Sync de contactos con debounce
+│   ├── connection.ts   # Conexión Baileys + caché de versión + onSocketCreated
+│   ├── contacts.ts     # Sync de contactos (pre-conexión) con debounce
 │   ├── channels.ts     # Sync de canales/newsletters
 │   ├── groups.ts       # Groups con caché TTL 5min
 │   └── sender.ts       # Envío inteligente con streaming
