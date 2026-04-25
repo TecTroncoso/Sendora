@@ -1,4 +1,4 @@
-import { getSocket } from "./connection.js";
+import type { WASocket } from "@whiskeysockets/baileys";
 import { getDb } from "../db/client.js";
 import { getSessionId } from "../config/session.js";
 
@@ -73,15 +73,19 @@ let syncResolver: (() => void) | null = null;
 
 /**
  * Inicializa los listeners de contactos.
- * Llamar DESPUÉS de conectar. Espera a que la caché se cargue.
+ * 
+ * IMPORTANTE: Recibe el socket directamente para poder registrar
+ * los event handlers ANTES de que la conexión se abra.
+ * Baileys dispara messaging-history.set durante el handshake,
+ * si registramos después de "open", perdemos los eventos.
  */
-export async function initContactsListener(): Promise<void> {
-  const sock = getSocket();
-  
-  // Cargar caché ANTES de registrar listeners (awaited)
-  await loadContacts();
+export function initContactsListener(sock: WASocket): void {
+  // ══════════════════════════════════════════════════════
+  // PASO 1: Registrar listeners SINCRÓNICAMENTE (inmediato)
+  // No usar await antes de esto — los eventos pueden llegar en cualquier momento
+  // ══════════════════════════════════════════════════════
 
-  // Sync inicial: messaging-history.set trae contactos y chats
+  // Sync inicial: messaging-history.set trae contactos y chats en bulk
   sock.ev.on("messaging-history.set", ({ contacts, chats }) => {
     let inserted = false;
 
@@ -98,7 +102,7 @@ export async function initContactsListener(): Promise<void> {
       }
     }
 
-    // Extraer contactos de los chats (útil cuando syncFullHistory es false)
+    // Extraer contactos de los chats (útil como fallback)
     if (chats) {
       for (const chat of chats) {
         if (chat.id && !chat.id.endsWith("@g.us") && !chat.id.includes("newsletter") && chat.id !== "status@broadcast") {
@@ -117,7 +121,6 @@ export async function initContactsListener(): Promise<void> {
     if (inserted) {
       console.log(`📇 ${contactsMap.size} contactos sincronizados`);
       
-      // Primer sync: guardar INMEDIATAMENTE (sin debounce)
       if (!firstSyncDone) {
         firstSyncDone = true;
         saveContacts(true);
@@ -126,7 +129,7 @@ export async function initContactsListener(): Promise<void> {
       }
     }
 
-    // Resolver siempre que llegue el evento (tenga o no contactos explícitos)
+    // Resolver siempre que llegue el evento
     if (syncResolver) {
       syncResolver();
       syncResolver = null;
@@ -154,7 +157,7 @@ export async function initContactsListener(): Promise<void> {
     }
   });
 
-  // Actualizaciones incrementales
+  // Actualizaciones incrementales de contactos
   sock.ev.on("contacts.update", (updates) => {
     let updated = false;
     for (const update of updates) {
@@ -190,22 +193,30 @@ export async function initContactsListener(): Promise<void> {
       saveContacts();
     }
   });
+
+  // ══════════════════════════════════════════════════════
+  // PASO 2: Cargar caché en background (no bloquea los listeners)
+  // ══════════════════════════════════════════════════════
+  loadContacts().catch((err) =>
+    console.error("Error cargando caché de contactos:", err)
+  );
 }
 
 /**
  * Espera a que llegue el primer batch de contactos de WhatsApp.
- * Si ya hay contactos en caché, resuelve inmediatamente.
- * Timeout de 8 segundos para no bloquear indefinidamente.
+ * Si ya hay contactos (caché o sync), resuelve inmediatamente.
+ * Timeout de 15 segundos para no bloquear indefinidamente.
  */
-export function waitForSync(timeoutMs = 8000): Promise<void> {
+export function waitForSync(timeoutMs = 15000): Promise<void> {
   if (contactsMap.size > 0) return Promise.resolve();
 
   return new Promise<void>((resolve) => {
     syncResolver = resolve;
     setTimeout(() => {
       if (syncResolver) {
+        console.log(`⚠️  Timeout de sincronización (${timeoutMs / 1000}s) — continuando sin contactos`);
         syncResolver = null;
-        resolve(); // Timeout — seguimos sin contactos pero no bloqueamos
+        resolve();
       }
     }, timeoutMs);
   });

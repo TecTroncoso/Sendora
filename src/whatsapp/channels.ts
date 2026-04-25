@@ -1,4 +1,4 @@
-import { getSocket } from "./connection.js";
+import type { WASocket } from "@whiskeysockets/baileys";
 import { getDb } from "../db/client.js";
 import { getSessionId } from "../config/session.js";
 
@@ -64,13 +64,10 @@ async function saveChannels(immediate = false) {
 
 /**
  * Inicializa listener para capturar newsletters del historial.
- * Llamar DESPUÉS de conectar. Espera a que la caché se cargue.
+ * Recibe el socket directamente para registrar ANTES de que la conexión abra.
  */
-export async function initChannelsListener(): Promise<void> {
-  const sock = getSocket();
-  
-  // Cargar caché ANTES de registrar listeners (awaited)
-  await loadChannels();
+export function initChannelsListener(sock: WASocket): void {
+  // Registrar listeners SINCRÓNICAMENTE (sin await previo)
 
   sock.ev.on("messaging-history.set", ({ chats }) => {
     if (chats) {
@@ -110,6 +107,11 @@ export async function initChannelsListener(): Promise<void> {
       saveChannels();
     }
   });
+
+  // Cargar caché en background
+  loadChannels().catch((err) =>
+    console.error("Error cargando caché de canales:", err)
+  );
 }
 
 export function getChannels(): Channel[] {

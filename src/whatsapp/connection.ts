@@ -61,7 +61,8 @@ export function getLastPairingCode(): string | null {
 
 export function connectWhatsApp(
   authMode: AuthMode,
-  phoneNumber?: string
+  phoneNumber?: string,
+  onSocketCreated?: (sock: WASocket) => void
 ): Promise<WASocket> {
   if (sock || isConnecting) {
     return Promise.reject(new Error("Ya hay una conexión en curso o activa"));
@@ -84,6 +85,13 @@ export function connectWhatsApp(
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
       });
+
+      // Permitir que el caller registre listeners ANTES de que la conexión abra
+      // Esto es CRÍTICO: Baileys dispara messaging-history.set durante el handshake,
+      // si esperamos a que la conexión abra, los eventos se pierden.
+      if (onSocketCreated) {
+        onSocketCreated(sock);
+      }
 
       sock.ev.on("creds.update", saveCreds);
 
@@ -114,7 +122,7 @@ export function connectWhatsApp(
           if (shouldReconnect) {
             console.log("🔄 Reconectando en 3 segundos...\n");
             setTimeout(() => {
-              connectWhatsApp(authMode, phoneNumber).then(resolve).catch(reject);
+              connectWhatsApp(authMode, phoneNumber, onSocketCreated).then(resolve).catch(reject);
             }, 3000);
           } else {
             console.log(`🚪 Sesión cerrada para el usuario ${sessionId}.\n`);

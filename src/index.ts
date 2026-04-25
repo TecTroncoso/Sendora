@@ -20,6 +20,17 @@ console.info = function (...args) {
   originalConsoleInfo.apply(console, args);
 };
 
+/**
+ * Callback que registra listeners de datos en el socket
+ * ANTES de que la conexión se abra.
+ * Esto evita la race condition donde messaging-history.set
+ * se dispara antes de que los listeners estén registrados.
+ */
+function setupDataListeners(sock: import("@whiskeysockets/baileys").WASocket): void {
+  initContactsListener(sock);
+  initChannelsListener(sock);
+}
+
 async function main(): Promise<void> {
   console.log("╔═══════════════════════════════════════════╗");
   console.log("║   🤖 WhatsApp Automatización v1.0.0      ║");
@@ -56,9 +67,7 @@ async function main(): Promise<void> {
     if (isRegistered) {
       console.log("✅ Sesión guardada detectada. Auto-conectando al bot...");
       try {
-        await connectWhatsApp("qr");
-        await initContactsListener();
-        await initChannelsListener();
+        await connectWhatsApp("qr", undefined, setupDataListeners);
       } catch (err) {
         console.error("Error al auto-conectar:", err);
       }
@@ -93,14 +102,12 @@ async function main(): Promise<void> {
     }
 
     try {
-      const sock = await connectWhatsApp(authMode, phoneNumber?.trim());
+      // setupDataListeners se ejecuta INMEDIATAMENTE después de makeWASocket,
+      // ANTES de que la conexión abra — así capturamos messaging-history.set
+      const sock = await connectWhatsApp(authMode, phoneNumber?.trim(), setupDataListeners);
 
-      // Inicializar listeners de datos (await para cargar caché)
-      await initContactsListener();
-      await initChannelsListener();
-
-      // Esperar sincronización inteligente: si hay caché resuelve al toque,
-      // si no, espera hasta 8s al primer batch de messaging-history.set
+      // Esperar sincronización: si hay caché resuelve al toque,
+      // si no, espera hasta 15s al primer batch de messaging-history.set
       console.log("⏳ Sincronizando datos de WhatsApp...");
       await waitForSync();
 
